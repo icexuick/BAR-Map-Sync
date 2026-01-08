@@ -129,9 +129,10 @@ def extract_map_info(sd7_url):
     return min_h, max_h
 
 def update_webflow_item(item_id, min_h, max_h):
-    """Sends the found data to Webflow."""
-    url = f"https://api.webflow.com/v2/collections/{COLLECTION_ID}/items/{item_id}"
+    """Sends data to Webflow AND publishes the item immediately."""
     
+    # STEP 1: Update the staged data (Draft)
+    url_update = f"https://api.webflow.com/v2/collections/{COLLECTION_ID}/items/{item_id}"
     payload = {
         "fieldData": {
             FIELD_MIN: min_h,
@@ -140,11 +141,27 @@ def update_webflow_item(item_id, min_h, max_h):
     }
     
     try:
-        response = requests.patch(url, json=payload, headers=HEADERS)
+        # 1. Update request
+        response = requests.patch(url_update, json=payload, headers=HEADERS)
         if response.status_code == 200:
-            print(f"   -> SUCCESS: Item updated.")
+            print(f"   -> Update successful (staged). Now publishing...")
+            
+            # STEP 2: Publish this specific item (Make live)
+            url_publish = f"https://api.webflow.com/v2/collections/{COLLECTION_ID}/items/publish"
+            payload_publish = {
+                "itemIds": [item_id] # Webflow expects a list of IDs
+            }
+            
+            pub_response = requests.post(url_publish, json=payload_publish, headers=HEADERS)
+            
+            if pub_response.status_code in [200, 202]:
+                print(f"   -> SUCCESS: Item is LIVE!")
+            else:
+                print(f"   -> ERROR publishing: {pub_response.text}")
+                
         else:
             print(f"   -> UPDATE FAILED: {response.text}")
+
     except Exception as e:
         print(f"   -> API Error: {e}")
 
