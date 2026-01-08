@@ -22,14 +22,17 @@ HEADERS = {
     "content-type": "application/json"
 }
 
-def get_all_maps():
-    """Fetches ALL items from Webflow, regardless of existing data."""
+def get_maps_without_height():
+    """
+    Fetches items from Webflow.
+    Filters: Only keeps items where min OR max height is missing (None).
+    """
     url = f"https://api.webflow.com/v2/collections/{COLLECTION_ID}/items"
     items_to_process = []
     offset = 0
     limit = 100
     
-    print("Fetching ALL CMS items from Webflow...")
+    print("Checking for NEW maps (missing height data)...")
     
     while True:
         params = {'limit': limit, 'offset': offset}
@@ -45,11 +48,15 @@ def get_all_maps():
         if not current_batch:
             break
 
-        print(f"   ...batch processed (offset {offset})")
-
-        # HIER IS DE WIJZIGING: We voegen gewoon alles toe, geen checks meer.
+        # Check per item of de data er al is
         for item in current_batch:
-            items_to_process.append(item)
+            fields = item.get('fieldData', {})
+            
+            # --- HET FILTER ---
+            # Als min of max height leeg is, voegen we hem toe aan de 'te doen' lijst.
+            # Is het al ingevuld? Dan negeren we hem.
+            if fields.get(FIELD_MIN) is None or fields.get(FIELD_MAX) is None:
+                items_to_process.append(item)
         
         if len(current_batch) < limit:
             break
@@ -169,9 +176,14 @@ def update_webflow_item(item_id, min_h, max_h, void_water):
         print(f"   -> API Error: {e}")
 
 def main():
-    # Nu roepen we de functie aan die ALLES ophaalt
-    items = get_all_maps()
-    print(f"--- Start processing {len(items)} maps ---\n")
+    # Haal alleen de nieuwe maps op
+    items = get_maps_without_height()
+    
+    if not items:
+        print("No new maps to process. Exiting.")
+        return
+
+    print(f"--- Start processing {len(items)} NEW maps ---\n")
     
     for item in items:
         name = item['fieldData'].get('name', 'Nameless')
