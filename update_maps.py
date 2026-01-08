@@ -3,6 +3,7 @@ import py7zr
 import re
 import os
 import shutil
+import time
 
 # --- CONFIGURATIE ---
 WEBFLOW_API_TOKEN = os.environ.get("WEBFLOW_API_TOKEN") # Haal uit environment variables
@@ -130,6 +131,10 @@ def main():
             update_webflow_item(item['id'], min_h, max_h)
         else:
             print("Geen data gevonden in mapinfo.lua")
+
+        # --- DE PAUZE ---
+        print("Even wachten voor de API limieten...")
+        time.sleep(2)  # Wacht 2 seconden voor de volgende map
 
 if __name__ == "__main__":
     main()
