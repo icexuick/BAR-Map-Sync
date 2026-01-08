@@ -7,7 +7,7 @@ import time
 
 # --- CONFIGURATIE ---
 WEBFLOW_API_TOKEN = os.environ.get("WEBFLOW_API_TOKEN") # Haal uit environment variables
-COLLECTION_ID = "JOUW_COLLECTION_ID_HIER" # Of ook via env var
+COLLECTION_ID = "6564c6553676389f8ba45aaf" # Of ook via env var
 # Controleer goed wat de field slugs zijn in Webflow (vaak alles lowercase met streepjes)
 FIELD_MIN = "map-height-min"
 FIELD_MAX = "map-height-max"
