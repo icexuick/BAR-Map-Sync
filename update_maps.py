@@ -6,7 +6,9 @@ import shutil
 import time
 
 # --- CONFIGURATIE ---
-WEBFLOW_API_TOKEN = "ecc5c96047196d316bf15f0965d58caf4bae19f8801093498651d99bc2f49064"
+WEBFLOW_API_TOKEN = os.environ.get("WEBFLOW_API_TOKEN")
+if not WEBFLOW_API_TOKEN:
+    raise ValueError("CRITICAL: Geen WEBFLOW_API_TOKEN gevonden in environment variables.")
 COLLECTION_ID = "6564c6553676389f8ba45aaf"
 FIELD_MIN = "map-height-min"
 FIELD_MAX = "map-height-max"

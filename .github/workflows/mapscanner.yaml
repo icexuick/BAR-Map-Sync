@@ -12,7 +12,45 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout codename: Update Webflow Maps
+
+on:
+  # Optie 1: Schema (Cronjob)
+  schedule:
+    # Draait elke dag om 04:00 's nachts UTC
+    # Syntax is: minuut uur dag maand dag-van-de-week
+    - cron: '0 4 * * *'
+  
+  # Optie 2: Handmatige knop (zodat je het nu direct kan testen)
+  workflow_dispatch:
+
+jobs:
+  run-map-updater:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Haal de code op uit de repo
       - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Installeer Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      # 3. Installeer de libraries
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # 4. Draai het script
+      - name: Run update script
+        # Hier koppelen we de GitHub Secret aan de script variabele
+        env:
+          WEBFLOW_API_TOKEN: ${{ secrets.WEBFLOW_API_TOKEN }}
+        run: python update_maps.py  # <-- Pas dit aan als je bestandsnaam anders is!
         uses: actions/checkout@v3
 
       - name: Set up Python
