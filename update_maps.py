@@ -9,10 +9,12 @@ import time
 WEBFLOW_API_TOKEN = os.environ.get("WEBFLOW_API_TOKEN")
 if not WEBFLOW_API_TOKEN:
     raise ValueError("CRITICAL: No WEBFLOW_API_TOKEN found in environment variables.")
+
 COLLECTION_ID = "6564c6553676389f8ba45aaf"
 FIELD_MIN = "map-height-min"
 FIELD_MAX = "map-height-max"
 FIELD_DOWNLOAD_URL = "downloadurl"
+FIELD_VOID_WATER = "void-water" 
 
 HEADERS = {
     "Authorization": f"Bearer {WEBFLOW_API_TOKEN}",
@@ -20,14 +22,14 @@ HEADERS = {
     "content-type": "application/json"
 }
 
-def get_maps_without_height():
-    """Fetches items from Webflow that do not have height data yet."""
+def get_all_maps():
+    """Fetches ALL items from Webflow, regardless of existing data."""
     url = f"https://api.webflow.com/v2/collections/{COLLECTION_ID}/items"
     items_to_process = []
     offset = 0
     limit = 100
     
-    print("Fetching CMS items from Webflow...")
+    print("Fetching ALL CMS items from Webflow...")
     
     while True:
         params = {'limit': limit, 'offset': offset}
@@ -45,11 +47,9 @@ def get_maps_without_height():
 
         print(f"   ...batch processed (offset {offset})")
 
+        # HIER IS DE WIJZIGING: We voegen gewoon alles toe, geen checks meer.
         for item in current_batch:
-            fields = item.get('fieldData', {})
-            # Check if data already exists (empty field is None)
-            if fields.get(FIELD_MIN) is None or fields.get(FIELD_MAX) is None:
-                items_to_process.append(item)
+            items_to_process.append(item)
         
         if len(current_batch) < limit:
             break
@@ -61,11 +61,12 @@ def get_maps_without_height():
 def extract_map_info(sd7_url):
     """
     Downloads the map, extracts ONLY the mapinfo.lua in the root, 
-    and parses min/max height.
+    parses min/max height AND voidWater.
     """
     temp_archive = "temp_map.sd7"
     temp_extract_dir = "temp_extract"
     min_h, max_h = None, None
+    void_water = False 
     
     # Cleanup beforehand
     if os.path.exists(temp_extract_dir):
@@ -86,9 +87,6 @@ def extract_map_info(sd7_url):
             with py7zr.SevenZipFile(temp_archive, mode='r') as z:
                 all_files = z.getnames()
                 
-                # --- THE FIX ---
-                # We look exactly for "mapinfo.lua". 
-                # If a file is in a subfolder, it's named "folder/mapinfo.lua", so that won't match.
                 target_file = None
                 for f in all_files:
                     if f.lower() == "mapinfo.lua":
@@ -97,7 +95,7 @@ def extract_map_info(sd7_url):
                 
                 if not target_file:
                     print("   -> NO mapinfo.lua found in root (subfolders ignored).")
-                    return None, None
+                    return None, None, False
                 
                 # 3. Extract (only that single file)
                 z.extract(targets=[target_file], path=temp_extract_dir)
@@ -107,8 +105,7 @@ def extract_map_info(sd7_url):
                 with open(local_path, 'r', encoding='utf-8', errors='ignore') as f:
                     content = f.read()
                     
-                    # Regex to find minheight and maxheight
-                    # Looks for: minheight = 100  or  minheight=100
+                    # Regex for Height
                     min_match = re.search(r'minheight\s*=\s*([\d\.-]+)', content, re.IGNORECASE)
                     max_match = re.search(r'maxheight\s*=\s*([\d\.-]+)', content, re.IGNORECASE)
                     
@@ -116,6 +113,11 @@ def extract_map_info(sd7_url):
                         min_h = float(min_match.group(1))
                     if max_match:
                         max_h = float(max_match.group(1))
+
+                    # Regex for VoidWater
+                    void_match = re.search(r'voidWater\s*=\s*(true|1)', content, re.IGNORECASE)
+                    if void_match:
+                        void_water = True
 
     except Exception as e:
         print(f"   -> Error processing map: {e}")
@@ -126,17 +128,18 @@ def extract_map_info(sd7_url):
         if os.path.exists(temp_archive):
             os.remove(temp_archive)
 
-    return min_h, max_h
+    return min_h, max_h, void_water
 
-def update_webflow_item(item_id, min_h, max_h):
+def update_webflow_item(item_id, min_h, max_h, void_water):
     """Sends data to Webflow AND publishes the item immediately."""
     
-    # STEP 1: Update the staged data (Draft)
     url_update = f"https://api.webflow.com/v2/collections/{COLLECTION_ID}/items/{item_id}"
+    
     payload = {
         "fieldData": {
             FIELD_MIN: min_h,
-            FIELD_MAX: max_h
+            FIELD_MAX: max_h,
+            FIELD_VOID_WATER: void_water
         }
     }
     
@@ -144,12 +147,12 @@ def update_webflow_item(item_id, min_h, max_h):
         # 1. Update request
         response = requests.patch(url_update, json=payload, headers=HEADERS)
         if response.status_code == 200:
-            print(f"   -> Update successful (staged). Now publishing...")
+            print(f"   -> Update successful (staged: H:{min_h}/{max_h} Void:{void_water}). Now publishing...")
             
-            # STEP 2: Publish this specific item (Make live)
+            # STEP 2: Publish this specific item
             url_publish = f"https://api.webflow.com/v2/collections/{COLLECTION_ID}/items/publish"
             payload_publish = {
-                "itemIds": [item_id] # Webflow expects a list of IDs
+                "itemIds": [item_id]
             }
             
             pub_response = requests.post(url_publish, json=payload_publish, headers=HEADERS)
@@ -166,7 +169,8 @@ def update_webflow_item(item_id, min_h, max_h):
         print(f"   -> API Error: {e}")
 
 def main():
-    items = get_maps_without_height()
+    # Nu roepen we de functie aan die ALLES ophaalt
+    items = get_all_maps()
     print(f"--- Start processing {len(items)} maps ---\n")
     
     for item in items:
@@ -178,16 +182,16 @@ def main():
             continue
             
         print(f"Processing: {name}")
-        min_h, max_h = extract_map_info(url)
+        min_h, max_h, void_water = extract_map_info(url)
         
         if min_h is not None and max_h is not None:
-            print(f"   -> Found: Min {min_h} / Max {max_h}")
-            update_webflow_item(item['id'], min_h, max_h)
+            print(f"   -> Found: Min {min_h} / Max {max_h} / VoidWater: {void_water}")
+            update_webflow_item(item['id'], min_h, max_h, void_water)
         else:
             print("   -> No usable height data found.")
 
         # Respect API rate limits
-        time.sleep(1) 
+        time.sleep(2) 
 
 if __name__ == "__main__":
     main()
