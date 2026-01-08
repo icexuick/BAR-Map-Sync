@@ -1,25 +1,11 @@
-name: Update BAR Map Heights
-
-on:
-  schedule:
-    # Draai elk uur op minuut 0
-    - cron: '0 * * * *'
-  workflow_dispatch: 
-    # Hiermee kun je hem ook handmatig starten via een knop in Github
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout codename: Update Webflow Maps
+name: Update Webflow Maps
 
 on:
   # Optie 1: Schema (Cronjob)
   schedule:
-    # Draait elke dag om 04:00 's nachts UTC
+    # Draai elk uur
     # Syntax is: minuut uur dag maand dag-van-de-week
-    - cron: '0 4 * * *'
+    - cron: '0 4* * * *'
   
   # Optie 2: Handmatige knop (zodat je het nu direct kan testen)
   workflow_dispatch:
@@ -51,18 +37,3 @@ jobs:
         env:
           WEBFLOW_API_TOKEN: ${{ secrets.WEBFLOW_API_TOKEN }}
         run: python update_maps.py  # <-- Pas dit aan als je bestandsnaam anders is!
-        uses: actions/checkout@v3
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
-
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-
-      - name: Run script
-        env:
-          WEBFLOW_API_TOKEN: ${{ secrets.WEBFLOW_API_TOKEN }}
-        run: python update_maps.py
