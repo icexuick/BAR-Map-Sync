@@ -5,10 +5,10 @@ import os
 import shutil
 import time
 
-# --- CONFIGURATIE ---
+# --- CONFIGURATION ---
 WEBFLOW_API_TOKEN = os.environ.get("WEBFLOW_API_TOKEN")
 if not WEBFLOW_API_TOKEN:
-    raise ValueError("CRITICAL: Geen WEBFLOW_API_TOKEN gevonden in environment variables.")
+    raise ValueError("CRITICAL: No WEBFLOW_API_TOKEN found in environment variables.")
 COLLECTION_ID = "6564c6553676389f8ba45aaf"
 FIELD_MIN = "map-height-min"
 FIELD_MAX = "map-height-max"
@@ -21,13 +21,13 @@ HEADERS = {
 }
 
 def get_maps_without_height():
-    """Haalt items op uit Webflow waar nog geen hoogte data bij staat."""
+    """Fetches items from Webflow that do not have height data yet."""
     url = f"https://api.webflow.com/v2/collections/{COLLECTION_ID}/items"
     items_to_process = []
     offset = 0
     limit = 100
     
-    print("Ophalen van CMS items uit Webflow...")
+    print("Fetching CMS items from Webflow...")
     
     while True:
         params = {'limit': limit, 'offset': offset}
@@ -43,11 +43,11 @@ def get_maps_without_height():
         if not current_batch:
             break
 
-        print(f"   ...batch verwerkt (offset {offset})")
+        print(f"   ...batch processed (offset {offset})")
 
         for item in current_batch:
             fields = item.get('fieldData', {})
-            # Check of data al bestaat (leeg veld is None)
+            # Check if data already exists (empty field is None)
             if fields.get(FIELD_MIN) is None or fields.get(FIELD_MAX) is None:
                 items_to_process.append(item)
         
@@ -60,35 +60,35 @@ def get_maps_without_height():
 
 def extract_map_info(sd7_url):
     """
-    Downloadt de map, pakt ALLEEN de mapinfo.lua in de root, 
-    en haalt de min/max height eruit.
+    Downloads the map, extracts ONLY the mapinfo.lua in the root, 
+    and parses min/max height.
     """
     temp_archive = "temp_map.sd7"
     temp_extract_dir = "temp_extract"
     min_h, max_h = None, None
     
-    # Opruimen vooraf
+    # Cleanup beforehand
     if os.path.exists(temp_extract_dir):
         shutil.rmtree(temp_extract_dir)
     if os.path.exists(temp_archive):
         os.remove(temp_archive)
     
     try:
-        # 1. Downloaden
-        print(f"   -> Downloaden: {sd7_url}")
+        # 1. Download
+        print(f"   -> Downloading: {sd7_url}")
         with requests.get(sd7_url, stream=True) as r:
             r.raise_for_status()
             with open(temp_archive, 'wb') as f:
                 shutil.copyfileobj(r.raw, f)
         
-        # 2. Archief openen
+        # 2. Open archive
         if py7zr.is_7zfile(temp_archive):
             with py7zr.SevenZipFile(temp_archive, mode='r') as z:
                 all_files = z.getnames()
                 
-                # --- DE FIX ---
-                # We zoeken exact naar "mapinfo.lua". 
-                # Als een bestand in een map zit, heet het "map/mapinfo.lua", dus dat matcht niet.
+                # --- THE FIX ---
+                # We look exactly for "mapinfo.lua". 
+                # If a file is in a subfolder, it's named "folder/mapinfo.lua", so that won't match.
                 target_file = None
                 for f in all_files:
                     if f.lower() == "mapinfo.lua":
@@ -96,19 +96,19 @@ def extract_map_info(sd7_url):
                         break
                 
                 if not target_file:
-                    print("   -> GEEN mapinfo.lua in de root gevonden (submappen genegeerd).")
+                    print("   -> NO mapinfo.lua found in root (subfolders ignored).")
                     return None, None
                 
-                # 3. Uitpakken (alleen dat ene bestand)
+                # 3. Extract (only that single file)
                 z.extract(targets=[target_file], path=temp_extract_dir)
                 local_path = os.path.join(temp_extract_dir, target_file)
                 
-                # 4. Lezen en Parsen
+                # 4. Read and Parse
                 with open(local_path, 'r', encoding='utf-8', errors='ignore') as f:
                     content = f.read()
                     
-                    # Regex om minheight en maxheight te vinden
-                    # Zoekt naar: minheight = 100  of  minheight=100
+                    # Regex to find minheight and maxheight
+                    # Looks for: minheight = 100  or  minheight=100
                     min_match = re.search(r'minheight\s*=\s*([\d\.-]+)', content, re.IGNORECASE)
                     max_match = re.search(r'maxheight\s*=\s*([\d\.-]+)', content, re.IGNORECASE)
                     
@@ -118,9 +118,9 @@ def extract_map_info(sd7_url):
                         max_h = float(max_match.group(1))
 
     except Exception as e:
-        print(f"   -> Fout bij verwerken map: {e}")
+        print(f"   -> Error processing map: {e}")
     finally:
-        # Opruimen achteraf
+        # Cleanup afterwards
         if os.path.exists(temp_extract_dir):
             shutil.rmtree(temp_extract_dir)
         if os.path.exists(temp_archive):
@@ -129,7 +129,7 @@ def extract_map_info(sd7_url):
     return min_h, max_h
 
 def update_webflow_item(item_id, min_h, max_h):
-    """Stuurt de gevonden data naar Webflow."""
+    """Sends the found data to Webflow."""
     url = f"https://api.webflow.com/v2/collections/{COLLECTION_ID}/items/{item_id}"
     
     payload = {
@@ -142,7 +142,7 @@ def update_webflow_item(item_id, min_h, max_h):
     try:
         response = requests.patch(url, json=payload, headers=HEADERS)
         if response.status_code == 200:
-            print(f"   -> SUCCES: Item geupdate.")
+            print(f"   -> SUCCESS: Item updated.")
         else:
             print(f"   -> UPDATE FAILED: {response.text}")
     except Exception as e:
@@ -150,26 +150,26 @@ def update_webflow_item(item_id, min_h, max_h):
 
 def main():
     items = get_maps_without_height()
-    print(f"--- Start verwerking van {len(items)} maps ---\n")
+    print(f"--- Start processing {len(items)} maps ---\n")
     
     for item in items:
-        name = item['fieldData'].get('name', 'Naamloos')
+        name = item['fieldData'].get('name', 'Nameless')
         url = item['fieldData'].get(FIELD_DOWNLOAD_URL)
         
         if not url:
-            print(f"Overslaan: {name} (Geen download URL)")
+            print(f"Skipping: {name} (No download URL)")
             continue
             
-        print(f"Verwerken: {name}")
+        print(f"Processing: {name}")
         min_h, max_h = extract_map_info(url)
         
         if min_h is not None and max_h is not None:
-            print(f"   -> Gevonden: Min {min_h} / Max {max_h}")
+            print(f"   -> Found: Min {min_h} / Max {max_h}")
             update_webflow_item(item['id'], min_h, max_h)
         else:
-            print("   -> Geen bruikbare hoogte data gevonden.")
+            print("   -> No usable height data found.")
 
-        # Respecteer API rate limits
+        # Respect API rate limits
         time.sleep(1) 
 
 if __name__ == "__main__":
