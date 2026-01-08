@@ -1,4 +1,4 @@
-name: Update Webflow Maps
+name: Update Webflow Map Heights
 
 on:
   # Optie 1: Schema (Cronjob)
